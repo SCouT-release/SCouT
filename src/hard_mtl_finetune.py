@@ -8,10 +8,10 @@ from src import utils
 from src.args import parse_arguments
 from src.datasets.common import get_dataloader, maybe_dictionarize
 from src.datasets.registry import get_dataset
-from src.hard_joint import hard_joint_checkpoint_path
+from src.hard_mtl import hard_mtl_checkpoint_path
 from src.heads import get_classification_head
 from src.modeling import ImageEncoder, MultiHeadImageClassifier
-from src.PCGrad import PCGrad, pcgrad_checkpoint_path
+from src.pcgrad import PCGrad, pcgrad_checkpoint_path
 from src.uncertainty_weighting import (
     UncertaintyWeighting,
     save_uw_statistics,
@@ -110,7 +110,7 @@ def _clip_gradients(params, args):
         return
     if args.clip_mode != "indept":
         raise ValueError(
-            "hard_joint_finetune.py supports --clip-mode indept or noclip."
+            "hard_mtl_finetune.py supports --clip-mode indept or noclip."
         )
     torch.nn.utils.clip_grad_norm_(params, args.grad_clip_norm)
 
@@ -202,22 +202,24 @@ def _train_one_pcgrad_step(
     }
 
 
-def hard_joint_finetune(args, train_datasets=None):
+def hard_mtl_finetune(args, train_datasets=None):
     assert args.save is not None, "Please provide a checkpoint directory with --save."
     assert args.num_steps > 0, "--num-steps must be positive."
     train_datasets = _normalize_train_datasets(train_datasets)
-    assert len(train_datasets) > 1, "Hard-joint fine-tuning needs at least two tasks."
-    finetuning_mode = getattr(args, "finetuning_mode", None) or "hard_joint"
-    if finetuning_mode not in {"hard_joint", "uw", "pcgrad"}:
-        raise ValueError("Expected --finetuning-mode hard_joint, uw, or pcgrad.")
+    assert len(train_datasets) > 1, "Hard MTL needs at least two tasks."
+    finetuning_mode = getattr(args, "finetuning_mode", None) or "hard_mtl"
+    if finetuning_mode not in {"hard_mtl", "hard_mtl_uw", "hard_mtl_pcgrad"}:
+        raise ValueError(
+            "Expected --finetuning-mode hard_mtl, hard_mtl_uw, or hard_mtl_pcgrad."
+        )
     args.finetuning_mode = finetuning_mode
 
-    if finetuning_mode == "uw":
-        print("Using hard-joint multitask fine-tuning with uncertainty weighting.")
-    elif finetuning_mode == "pcgrad":
-        print("Using hard-joint multitask fine-tuning with PCGrad.")
+    if finetuning_mode == "hard_mtl_uw":
+        print("Using Hard MTL + UW.")
+    elif finetuning_mode == "hard_mtl_pcgrad":
+        print("Using Hard MTL + PCGrad.")
     else:
-        print("Using hard-joint multitask fine-tuning.")
+        print("Using Hard MTL.")
     print(
         f"Training one shared encoder on {len(train_datasets)} tasks "
         f"for {args.num_steps} steps."
@@ -243,7 +245,7 @@ def hard_joint_finetune(args, train_datasets=None):
     uncertainty_weighting = None
     optimizer_params = params
     optimizer_lrs = args.lr
-    if finetuning_mode == "uw":
+    if finetuning_mode == "hard_mtl_uw":
         uncertainty_weighting = UncertaintyWeighting(len(states)).to(args.device)
         optimizer_params = [
             {"params": params, "lr": args.lr, "weight_decay": args.wd},
@@ -264,7 +266,7 @@ def hard_joint_finetune(args, train_datasets=None):
 
     model.train()
     optimizer.zero_grad()
-    pcgrad = PCGrad(params) if finetuning_mode == "pcgrad" else None
+    pcgrad = PCGrad(params) if finetuning_mode == "hard_mtl_pcgrad" else None
 
     print_every = 100
     for step in range(args.num_steps):
@@ -331,7 +333,7 @@ def hard_joint_finetune(args, train_datasets=None):
         else (
             pcgrad_checkpoint_path(args.save, args.run_name)
             if pcgrad is not None
-            else hard_joint_checkpoint_path(args.save, args.run_name)
+            else hard_mtl_checkpoint_path(args.save, args.run_name)
         )
     )
     model.image_encoder.save(save_path)
@@ -345,10 +347,11 @@ def hard_joint_finetune(args, train_datasets=None):
 if __name__ == "__main__":
     args = parse_arguments()
     if args.finetuning_mode is None:
-        args.finetuning_mode = "hard_joint"
+        args.finetuning_mode = "hard_mtl"
 
-    assert args.finetuning_mode in {"hard_joint", "uw", "pcgrad"}, (
-        "hard_joint_finetune.py expects --finetuning-mode=hard_joint, uw, or pcgrad."
+    assert args.finetuning_mode in {"hard_mtl", "hard_mtl_uw", "hard_mtl_pcgrad"}, (
+        "hard_mtl_finetune.py expects --finetuning-mode=hard_mtl, "
+        "hard_mtl_uw, or hard_mtl_pcgrad."
     )
 
     if args.save is None:
@@ -364,4 +367,4 @@ if __name__ == "__main__":
         f"for {args.num_steps} steps"
     )
     print("=" * 100)
-    hard_joint_finetune(args, train_datasets)
+    hard_mtl_finetune(args, train_datasets)

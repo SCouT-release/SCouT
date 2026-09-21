@@ -41,7 +41,6 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from src.attention_ft import configure_attention_finetuning  # noqa: E402
 from src.datasets.common import get_dataloader, maybe_dictionarize  # noqa: E402
 from src.datasets.registry import get_dataset  # noqa: E402
 from src.distributed import (  # noqa: E402
@@ -52,6 +51,7 @@ from src.distributed import (  # noqa: E402
     is_main_process,
     setup_torchrun,
 )
+from src.ft_attention import configure_ft_attention  # noqa: E402
 from src.heads import get_classification_head  # noqa: E402
 from src.linearize import LinearizedImageEncoder  # noqa: E402
 from src.mergopt import (  # noqa: E402
@@ -65,7 +65,7 @@ from src.modeling import (  # noqa: E402
     MultiHeadImageClassifier,
 )
 from src.sam import SAM  # noqa: E402
-from src.soft_joint_finetune import (  # noqa: E402
+from src.scout_training import (  # noqa: E402
     DEFAULT_DATASETS,
     _add_sharded_coupling_gradients,
 )
@@ -77,7 +77,7 @@ METHODS = (
     "ft_attention",
     "saft",
     "mergopt",
-    "socoft",
+    "scout",
     "hard_mtl",
 )
 INDEPENDENT_METHODS = frozenset(METHODS[:5])
@@ -87,18 +87,8 @@ METHOD_LABELS = {
     "ft_attention": "FT-Attention",
     "saft": "SAFT",
     "mergopt": "MergOPT",
-    "socoft": "SCouT",
+    "scout": "SCouT",
     "hard_mtl": "Hard MTL",
-}
-METHOD_ALIASES = {
-    "independent": "independent_ft",
-    "standard": "independent_ft",
-    "tft": "ftts",
-    "linear": "ftts",
-    "attention": "ft_attention",
-    "scout": "socoft",
-    "soft_joint": "socoft",
-    "hard_joint": "hard_mtl",
 }
 DEFAULT_ARCHITECTURES = ("ViT-B-32",)
 
@@ -131,7 +121,7 @@ def _comma_separated(value: str) -> list[str]:
 def _parse_methods(value: str) -> list[str]:
     methods = []
     for requested in _comma_separated(value):
-        canonical = METHOD_ALIASES.get(requested.lower(), requested.lower())
+        canonical = requested.lower()
         if canonical not in METHODS:
             raise argparse.ArgumentTypeError(
                 f"unknown method {requested!r}; choose from {', '.join(METHODS)}"
@@ -153,7 +143,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--methods",
         type=_parse_methods,
         default=list(METHODS),
-        help="Comma-separated methods; aliases tft/linear, attention, and *_joint work.",
+        help="Comma-separated methods using the names reported in the paper.",
     )
     parser.add_argument(
         "--train-dataset",
@@ -257,7 +247,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     if len(args.train_dataset) < 2:
         parser.error("the efficiency benchmark requires at least two tasks")
     if args.clip_mode == "global" and any(
-        method != "socoft" for method in args.methods
+        method != "scout" for method in args.methods
     ):
         parser.error(
             "--clip-mode=global is implemented only for SCouT; use noclip/indept "
@@ -366,7 +356,7 @@ def _build_specialist(
     model.freeze_head()
     model = model.to(task_args.device)
     params = (
-        configure_attention_finetuning(model, verbose=is_main_process())
+        configure_ft_attention(model, verbose=is_main_process())
         if mode == "ft_attention"
         else [param for param in model.parameters() if param.requires_grad]
     )
@@ -580,7 +570,7 @@ def _build_specialist_runtime(
     )
 
 
-def _clip_socoft(
+def _clip_scout(
     states: list[TaskState], all_params: list[torch.nn.Parameter], args: argparse.Namespace
 ) -> None:
     if args.clip_mode == "noclip":
@@ -604,13 +594,13 @@ def _clip_socoft(
             param.grad.mul_(coefficient.to(param.grad.dtype))
 
 
-def _build_socoft_runtime(
+def _build_scout_runtime(
     task_args: argparse.Namespace,
     local_datasets: list[str],
     total_tasks: int,
     device: torch.device,
 ) -> MethodRuntime:
-    states = [_build_specialist(task_args, name, "socoft") for name in local_datasets]
+    states = [_build_specialist(task_args, name, "scout") for name in local_datasets]
     loss_fn = _loss_function(task_args)
     all_params = [param for state in states for param in state.params]
     optimizer = torch.optim.AdamW(all_params, lr=task_args.lr, weight_decay=task_args.wd)
@@ -645,7 +635,7 @@ def _build_socoft_runtime(
 
         gradients_present = _has_gradient(all_params)
         scheduler(step)
-        _clip_socoft(states, all_params, task_args)
+        _clip_scout(states, all_params, task_args)
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         return {
@@ -767,8 +757,8 @@ def _build_runtime(
     local_datasets = datasets[get_rank() :: get_world_size()]
     if not local_datasets:
         raise RuntimeError("number of distributed processes cannot exceed number of tasks")
-    if method == "socoft":
-        return _build_socoft_runtime(task_args, local_datasets, len(datasets), device)
+    if method == "scout":
+        return _build_scout_runtime(task_args, local_datasets, len(datasets), device)
     if method == "hard_mtl":
         return _build_hard_mtl_runtime(task_args, local_datasets, device, len(datasets))
     return _build_specialist_runtime(method, task_args, local_datasets, len(datasets), device)
@@ -786,7 +776,7 @@ def _aggregate_sanity(
     optimizer_steps = _global_sum_int(local["optimizer_steps"], device)
     extra_operations = _global_sum_int(local["extra_operations"], device)
     task_minibatches = _global_sum_int(local["task_minibatches"], device)
-    expected_steps = total_tasks if method not in {"socoft", "hard_mtl"} else get_world_size()
+    expected_steps = total_tasks if method not in {"scout", "hard_mtl"} else get_world_size()
     expected_minibatches = total_tasks * num_grad_accumulation
     result = {
         "loss_finite": finite,
@@ -806,7 +796,7 @@ def _aggregate_sanity(
             if method == "saft"
             else "merge-offset perturb/closure/restore"
         )
-    elif method == "socoft":
+    elif method == "scout":
         # This first sanity step is coupled for the normal/default tau=1. For
         # larger tau, the final counter is checked after all warm-up steps.
         result["method_specific_operation_executed"] = extra_operations > 0
@@ -1077,7 +1067,7 @@ def benchmark_method(
 
     _synchronize_workers(device)
     failed_checks = _failed_sanity_checks(
-        sanity, include_method_specific=(method != "socoft")
+        sanity, include_method_specific=(method != "scout")
     )
     if failed_checks:
         raise RuntimeError(f"{METHOD_LABELS[method]} failed sanity checks: {failed_checks}")
@@ -1101,7 +1091,7 @@ def benchmark_method(
 
     _synchronize_workers(device)
     allocated, reserved = _gpu_peaks(device)
-    if method == "socoft":
+    if method == "scout":
         global_coupling_count = _global_sum_int(coupling_operations, device)
         sanity["method_specific_operation_executed"] = global_coupling_count > 0
         if not sanity["method_specific_operation_executed"]:
@@ -1122,7 +1112,7 @@ def benchmark_method(
         sanity,
         (
             "coupled round-robin task shards"
-            if method == "socoft"
+            if method == "scout"
             else "DDP shared encoder with round-robin task shards"
         ),
     )
@@ -1243,13 +1233,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "architectures": args.architectures,
                 "methods": [METHOD_LABELS[name] for name in args.methods],
                 "method_implementation_mapping": {
-                    "Independent FT": "src.indep_finetune standard AdamW path",
-                    "FTTS": "src.linearize.LinearizedImageEncoder (repository TFT/linear mode)",
-                    "FT-Attention": "src.attention_ft.configure_attention_finetuning",
+                    "Independent FT": "src.independent_finetune independent_ft AdamW path",
+                    "FTTS": "src.linearize.LinearizedImageEncoder (ftts mode)",
+                    "FT-Attention": "src.ft_attention.configure_ft_attention",
                     "SAFT": "src.sam.SAM wrapping AdamW",
                     "MergOPT": "src.mergopt.MergOPT wrapping AdamW",
                     "SCouT": "bucketed analytic coupling-gradient helper",
-                    "Hard MTL": "shared encoder and task heads as in src.hard_joint_finetune",
+                    "Hard MTL": "shared encoder and task heads as in src.hard_mtl_finetune",
                 },
                 "datasets": datasets,
                 "batch_size": args.batch_size,

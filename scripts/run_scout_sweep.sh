@@ -67,7 +67,7 @@ for coupling_lambda in ${LAMBDAS}; do
     --coupling-lambda "${coupling_lambda}"
 
   for merge_mode in ${MERGE_MODES}; do
-    python -m src.eval_task_addition \
+    python -m src.eval_merge \
       "${COMMON_ARGS[@]}" \
       --finetuning-mode scout \
       --eval-datasets "${DATASETS}" \

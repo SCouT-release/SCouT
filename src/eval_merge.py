@@ -6,13 +6,13 @@ from src.eval import evaluate_task_vector, evaluate_task_vector_at_coef
 from src.fisher import merge_task_vectors as fisher_merge_task_vectors
 from src.result_names import (
     finetuned_checkpoint_name,
+    merge_result_name,
     single_task_accuracy_name,
-    task_addition_name,
 )
-from src.soft_joint import (
-    soft_joint_accuracy_name,
-    soft_joint_addition_name,
-    soft_joint_checkpoint_name,
+from src.scout import (
+    scout_accuracy_name,
+    scout_checkpoint_name,
+    scout_merge_name,
 )
 from src.task_vectors import LinearizedTaskVector, NonLinearTaskVector
 from src.ties import merge_task_vectors as ties_merge_task_vectors
@@ -21,8 +21,8 @@ from src.wudi import merge_task_vectors as wudi_merge_task_vectors
 
 # This script evaluate multitask performance after merging
 # run this by:
-# python -m src.eval_task_addition
-#   --finetuning-mode=standard/linear/saft/attention/mergopt/soft_joint --model=ViT-B-32
+# python -m src.eval_merge
+#   --finetuning-mode=independent_ft/ftts/saft/ft_attention/mergopt/scout
 
 args = parse_arguments()
 
@@ -54,9 +54,9 @@ def _merge_task_vectors(task_vectors, pretrained_checkpoint, eval_datasets, args
 
 
 def _evaluate_merge(task_vector, pretrained_checkpoint, args):
-    posthoc_linearization = args.finetuning_mode == "posthoc"
+    posthoc_linearization = args.finetuning_mode == "posthoc_ftts"
     search_coefficient = args.merge_mode in {"ta", "fisher", "ties"} or (
-        args.merge_mode == "wudi" and args.finetuning_mode == "soft_joint"
+        args.merge_mode == "wudi" and args.finetuning_mode == "scout"
     )
     if search_coefficient:
         val_metrics = evaluate_task_vector(
@@ -109,23 +109,23 @@ eval_run_name = args.run_name or None
 
 
 print("*" * 100)
-if args.finetuning_mode == "standard":
-    print("Evaluating non-linear FT models.")
+if args.finetuning_mode == "independent_ft":
+    print("Evaluating Independent FT models.")
     ft_accuracies_path = os.path.join(
         args.save,
-        single_task_accuracy_name("standard", eval_run_name),
+        single_task_accuracy_name("independent_ft", eval_run_name),
     )
-elif args.finetuning_mode == "linear":
-    print("Evaluating linear FT models.")
+elif args.finetuning_mode == "ftts":
+    print("Evaluating FTTS models.")
     ft_accuracies_path = os.path.join(
         args.save,
-        single_task_accuracy_name("linear", eval_run_name),
+        single_task_accuracy_name("ftts", eval_run_name),
     )
-elif args.finetuning_mode == "posthoc":
-    print("Evaluating post-hoc linearized models.")
+elif args.finetuning_mode == "posthoc_ftts":
+    print("Evaluating post-hoc FTTS models.")
     ft_accuracies_path = os.path.join(
         args.save,
-        single_task_accuracy_name("posthoc", eval_run_name),
+        single_task_accuracy_name("posthoc_ftts", eval_run_name),
     )
 elif args.finetuning_mode == "saft":
     print("Evaluating SAFT models.")
@@ -133,11 +133,11 @@ elif args.finetuning_mode == "saft":
         args.save,
         single_task_accuracy_name("saft", eval_run_name),
     )
-elif args.finetuning_mode == "attention":
-    print("Evaluating attention-only FT models.")
+elif args.finetuning_mode == "ft_attention":
+    print("Evaluating FT-Attention models.")
     ft_accuracies_path = os.path.join(
         args.save,
-        single_task_accuracy_name("attention", eval_run_name),
+        single_task_accuracy_name("ft_attention", eval_run_name),
     )
 elif args.finetuning_mode == "mergopt":
     print("Evaluating MergOPT FT models.")
@@ -145,11 +145,11 @@ elif args.finetuning_mode == "mergopt":
         args.save,
         single_task_accuracy_name("mergopt", eval_run_name),
     )
-elif args.finetuning_mode == "soft_joint":
+elif args.finetuning_mode == "scout":
     print("Evaluating SCouT models.")
     ft_accuracies_path = os.path.join(
         args.save,
-        soft_joint_accuracy_name(
+        scout_accuracy_name(
             args.coupling_tau,
             args.coupling_lambda,
             run_name=eval_run_name,
@@ -165,30 +165,30 @@ with open(ft_accuracies_path) as f:
 task_vectors = []
 
 for dataset in eval_datasets:
-    if args.finetuning_mode == "linear":
-        pretrained_checkpoint = f"{args.save}/{dataset}Val/linear_zeroshot.pt"
-        checkpoint_name = finetuned_checkpoint_name("linear", eval_run_name)
+    if args.finetuning_mode == "ftts":
+        pretrained_checkpoint = f"{args.save}/{dataset}Val/ftts_zeroshot.pt"
+        checkpoint_name = finetuned_checkpoint_name("ftts", eval_run_name)
         finetuned_checkpoint = f"{args.save}/{dataset}Val/{checkpoint_name}"
         task_vectors.append(
             LinearizedTaskVector(pretrained_checkpoint, finetuned_checkpoint)
         )
     else:
         pretrained_checkpoint = f"{args.save}/{dataset}Val/zeroshot.pt"
-        if args.finetuning_mode in {"saft", "attention", "mergopt"}:
+        if args.finetuning_mode in {"saft", "ft_attention", "mergopt"}:
             checkpoint_name = finetuned_checkpoint_name(
                 args.finetuning_mode,
                 eval_run_name,
             )
             finetuned_checkpoint = f"{args.save}/{dataset}Val/{checkpoint_name}"
-        elif args.finetuning_mode == "soft_joint":
-            checkpoint_name = soft_joint_checkpoint_name(
+        elif args.finetuning_mode == "scout":
+            checkpoint_name = scout_checkpoint_name(
                 args.coupling_tau,
                 args.coupling_lambda,
                 run_name=eval_run_name,
             )
             finetuned_checkpoint = f"{args.save}/{dataset}Val/{checkpoint_name}"
         else:
-            checkpoint_name = finetuned_checkpoint_name("standard", eval_run_name)
+            checkpoint_name = finetuned_checkpoint_name("independent_ft", eval_run_name)
             finetuned_checkpoint = f"{args.save}/{dataset}Val/{checkpoint_name}"
         task_vectors.append(
             NonLinearTaskVector(pretrained_checkpoint, finetuned_checkpoint)
@@ -208,7 +208,7 @@ test_metrics = evaluate_task_vector_at_coef(
     pretrained_checkpoint,
     args,
     optimal_coef,
-    posthoc_linearization=args.finetuning_mode == "posthoc",
+    posthoc_linearization=args.finetuning_mode == "posthoc_ftts",
 )
 test_metrics["best_coef"] = optimal_coef
 test_metrics["merge_mode"] = args.merge_mode
@@ -229,23 +229,23 @@ print(f"Test absolute accuracy: {test_metrics['avg_top1']}")
 print(f"Test average loss: {test_metrics['avg_loss']}")
 additive_accuracies = {"test": test_metrics, "val": val_metrics}
 
-if args.finetuning_mode == "standard":
-    save_name = task_addition_name("standard", eval_run_name)
-elif args.finetuning_mode == "linear":
-    save_name = task_addition_name("linear", eval_run_name)
-elif args.finetuning_mode == "posthoc":
-    save_name = task_addition_name("posthoc", eval_run_name)
+if args.finetuning_mode == "independent_ft":
+    save_name = merge_result_name("independent_ft", eval_run_name)
+elif args.finetuning_mode == "ftts":
+    save_name = merge_result_name("ftts", eval_run_name)
+elif args.finetuning_mode == "posthoc_ftts":
+    save_name = merge_result_name("posthoc_ftts", eval_run_name)
 elif args.finetuning_mode == "saft":
-    save_name = task_addition_name("saft", eval_run_name)
-elif args.finetuning_mode == "attention":
-    save_name = task_addition_name("attention", eval_run_name)
+    save_name = merge_result_name("saft", eval_run_name)
+elif args.finetuning_mode == "ft_attention":
+    save_name = merge_result_name("ft_attention", eval_run_name)
 elif args.finetuning_mode == "mergopt":
-    save_name = task_addition_name("mergopt", eval_run_name)
-elif args.finetuning_mode == "soft_joint":
-    save_name = soft_joint_addition_name(
+    save_name = merge_result_name("mergopt", eval_run_name)
+elif args.finetuning_mode == "scout":
+    save_name = scout_merge_name(
         args.coupling_tau, args.coupling_lambda, run_name=eval_run_name
     )
 save_file = f"{args.save}/{_merge_result_name(save_name, args.merge_mode)}"
 with open(save_file, "w") as f:
     json.dump(additive_accuracies, f, indent=4)
-    print(f"Saved task addition results to {save_file}")
+    print(f"Saved merge results to {save_file}")

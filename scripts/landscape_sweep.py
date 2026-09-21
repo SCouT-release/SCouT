@@ -74,9 +74,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--scout-pattern",
-        "--socoft-pattern",
         dest="scout_pattern",
-        default="{task_val}/sj_finetuned_lambda_sweep_1_{lambda}.pt",
+        default="{task_val}/scout_finetuned_lambda_sweep_1_{lambda}.pt",
         help="Specialist path for lambda>0; supports {task}, {task_val}, and {lambda}.",
     )
     parser.add_argument("--data-location", default=os.path.expanduser("~/data"))

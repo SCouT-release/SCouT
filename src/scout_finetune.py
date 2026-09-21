@@ -1,6 +1,6 @@
-"""Public command-line entry point for SCouT training."""
+"""Command-line entry point for SCouT training."""
 
-from src.soft_joint_finetune import main
+from src.scout_training import main
 
 if __name__ == "__main__":
     main()

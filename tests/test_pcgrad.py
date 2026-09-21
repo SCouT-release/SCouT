@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from src.PCGrad import PCGrad
+from src.pcgrad import PCGrad
 
 
 class PCGradTest(unittest.TestCase):

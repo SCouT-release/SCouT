@@ -7,7 +7,7 @@ from unittest import mock
 import torch
 
 from src.args import parse_arguments
-from src.soft_joint import soft_joint_loss
+from src.scout import scout_loss
 
 
 class ToySpecialist(torch.nn.Module):
@@ -20,11 +20,11 @@ class ToySpecialist(torch.nn.Module):
 
 
 class ScoutTest(unittest.TestCase):
-    def test_public_cli_name_maps_to_legacy_checkpoint_mode(self):
+    def test_scout_cli_name_is_canonical(self):
         with mock.patch.object(sys, "argv", ["test", "--finetuning-mode", "scout"]):
             args = parse_arguments()
 
-        self.assertEqual(args.finetuning_mode, "soft_joint")
+        self.assertEqual(args.finetuning_mode, "scout")
 
     def test_zero_coupling_has_zero_loss(self):
         models = [ToySpecialist(), ToySpecialist()]
@@ -33,7 +33,7 @@ class ScoutTest(unittest.TestCase):
             for name, value in models[0].image_encoder.state_dict().items()
         }
 
-        loss = soft_joint_loss(models, pretrained_state, coupling_lambda=0.0)
+        loss = scout_loss(models, pretrained_state, coupling_lambda=0.0)
 
         self.assertEqual(loss.item(), 0.0)
 
@@ -41,7 +41,7 @@ class ScoutTest(unittest.TestCase):
         if importlib.util.find_spec("open_clip") is None:
             self.skipTest("open_clip is required to import the training entry point")
 
-        from src.soft_joint_finetune import _add_sharded_coupling_gradients
+        from src.scout_training import _add_sharded_coupling_gradients
 
         torch.manual_seed(7)
         models = [ToySpecialist() for _ in range(3)]
@@ -51,7 +51,7 @@ class ScoutTest(unittest.TestCase):
             name: torch.zeros_like(value)
             for name, value in reference_models[0].image_encoder.state_dict().items()
         }
-        reference_loss = soft_joint_loss(
+        reference_loss = scout_loss(
             reference_models,
             pretrained_state,
             coupling_lambda,

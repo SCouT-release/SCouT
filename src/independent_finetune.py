@@ -4,9 +4,9 @@ import time
 import torch
 
 from src.args import parse_arguments
-from src.attention_ft import configure_attention_finetuning
 from src.datasets.common import get_dataloader, maybe_dictionarize
 from src.datasets.registry import get_dataset
+from src.ft_attention import configure_ft_attention
 from src.heads import get_classification_head
 from src.linearize import LinearizedImageEncoder
 from src.mergopt import DEFAULT_MERGOPT_K_MAX, MergOPT
@@ -18,16 +18,16 @@ from src.utils import LabelSmoothing, cosine_lr
 
 # Step-controlled fine-tuning. All tasks train for args.num_steps and save checkpoints.
 # Examples:
-# python -m src.indep_finetune --finetuning-mode=standard --model=ViT-B-32
-# python -m src.indep_finetune --finetuning-mode=linear --model=ViT-B-32
-# python -m src.indep_finetune --finetuning-mode=attention --model=ViT-B-32
-# python -m src.indep_finetune --finetuning-mode=mergopt --model=ViT-B-32
-# python -m src.indep_finetune --finetuning-mode=saft --model=ViT-B-32
+# python -m src.independent_finetune --finetuning-mode=independent_ft --model=ViT-B-32
+# python -m src.independent_finetune --finetuning-mode=ftts --model=ViT-B-32
+# python -m src.independent_finetune --finetuning-mode=ft_attention --model=ViT-B-32
+# python -m src.independent_finetune --finetuning-mode=mergopt --model=ViT-B-32
+# python -m src.independent_finetune --finetuning-mode=saft --model=ViT-B-32
 def _clip_gradients(params, args):
     if args.clip_mode == "noclip":
         return
     if args.clip_mode != "indept":
-        raise ValueError("indep_finetune.py supports --clip-mode indept or noclip.")
+        raise ValueError("independent_finetune.py supports --clip-mode indept or noclip.")
     torch.nn.utils.clip_grad_norm_(params, args.grad_clip_norm)
 
 
@@ -45,24 +45,24 @@ def finetune(args):
     ckpdir = os.path.join(args.save, train_dataset)
 
     assert args.finetuning_mode in [
-        "linear",
+        "ftts",
         "saft",
-        "standard",
-        "attention",
+        "independent_ft",
+        "ft_attention",
         "mergopt",
-    ], "Only linear, standard, saft, attention, and mergopt are supported."
+    ], "Only independent_ft, ftts, saft, ft_attention, and mergopt are supported."
 
-    linearized_finetuning = args.finetuning_mode == "linear"
+    linearized_finetuning = args.finetuning_mode == "ftts"
     saft_finetuning = args.finetuning_mode == "saft"
-    attention_finetuning = args.finetuning_mode == "attention"
+    ft_attention_enabled = args.finetuning_mode == "ft_attention"
     mergopt_finetuning = args.finetuning_mode == "mergopt"
     run_name = args.run_name or None
     if linearized_finetuning:
         print("Using linearized fine-tuning.")
     if saft_finetuning:
         print(f"Using SAFT (ASAM) fine-tuning with rho={args.saft_rho}.")
-    if attention_finetuning:
-        print("Using attention-only fine-tuning.")
+    if ft_attention_enabled:
+        print("Using FT-Attention.")
     if mergopt_finetuning:
         if args.mergopt_k_max is None:
             args.mergopt_k_max = DEFAULT_MERGOPT_K_MAX
@@ -78,7 +78,7 @@ def finetune(args):
         finetuned_checkpoint_name(args.finetuning_mode, run_name),
     )
     zs_path = (
-        os.path.join(args.save, train_dataset, "linear_zeroshot.pt")
+        os.path.join(args.save, train_dataset, "ftts_zeroshot.pt")
         if linearized_finetuning
         else os.path.join(args.save, train_dataset, "zeroshot.pt")
     )
@@ -112,7 +112,7 @@ def finetune(args):
     model.freeze_head()
     model = model.to(args.device)
     attention_params = (
-        configure_attention_finetuning(model) if attention_finetuning else None
+        configure_ft_attention(model) if ft_attention_enabled else None
     )
 
     preprocess_fn = model.train_preprocess
@@ -169,7 +169,7 @@ def finetune(args):
     if args.save is not None:
         os.makedirs(ckpdir, exist_ok=True)
         model_path = (
-            os.path.join(ckpdir, "linear_zeroshot.pt")
+            os.path.join(ckpdir, "ftts_zeroshot.pt")
             if linearized_finetuning
             else os.path.join(ckpdir, "zeroshot.pt")
         )
@@ -275,7 +275,7 @@ def finetune(args):
 
     if args.save is not None:
         zs_path = (
-            os.path.join(ckpdir, "linear_zeroshot.pt")
+            os.path.join(ckpdir, "ftts_zeroshot.pt")
             if linearized_finetuning
             else os.path.join(ckpdir, "zeroshot.pt")
         )

@@ -9,16 +9,18 @@ def _run_suffix(run_name):
 
 
 def uw_checkpoint_path(save_dir, run_name=None):
-    return os.path.join(save_dir, f"uw_finetuned{_run_suffix(run_name)}.pt")
+    return os.path.join(
+        save_dir, f"hard_mtl_uw_finetuned{_run_suffix(run_name)}.pt"
+    )
 
 
 def uw_statistics_path(save_dir, run_name=None):
-    filename = f"uw_learned_statistics{_run_suffix(run_name)}.json"
+    filename = f"hard_mtl_uw_statistics{_run_suffix(run_name)}.json"
     return os.path.join(save_dir, filename)
 
 
 def uw_accuracy_name(run_name=None):
-    return f"uw_ft_accuracies{_run_suffix(run_name)}.json"
+    return f"hard_mtl_uw_accuracies{_run_suffix(run_name)}.json"
 
 
 class UncertaintyWeighting(torch.nn.Module):

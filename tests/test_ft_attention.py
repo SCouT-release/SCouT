@@ -2,7 +2,10 @@ import unittest
 
 import torch
 
-from src.attention_ft import attention_parameter_names, configure_attention_finetuning
+from src.ft_attention import (
+    configure_ft_attention,
+    ft_attention_parameter_names,
+)
 
 
 class AttentionFinetuningTest(unittest.TestCase):
@@ -12,7 +15,7 @@ class AttentionFinetuningTest(unittest.TestCase):
             torch.nn.Linear(4, 4),
         )
 
-        parameters = configure_attention_finetuning(model, verbose=False)
+        parameters = configure_ft_attention(model, verbose=False)
         trainable_names = {
             name for name, parameter in model.named_parameters() if parameter.requires_grad
         }
@@ -23,7 +26,7 @@ class AttentionFinetuningTest(unittest.TestCase):
     def test_attention_biases_are_optional(self):
         model = torch.nn.MultiheadAttention(4, 2, batch_first=True)
 
-        names = attention_parameter_names(model, include_bias=True)
+        names = ft_attention_parameter_names(model, include_bias=True)
 
         self.assertEqual(
             names,

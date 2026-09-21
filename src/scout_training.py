@@ -24,9 +24,9 @@ from src.distributed import (
 from src.heads import get_classification_head
 from src.modeling import ImageClassifier, ImageEncoder
 from src.result_names import finetuned_checkpoint_name
-from src.soft_joint import (
-    soft_joint_checkpoint_name,
-    soft_joint_distance_name,
+from src.scout import (
+    scout_checkpoint_name,
+    scout_distance_name,
 )
 from src.utils import LabelSmoothing, cosine_lr
 
@@ -70,8 +70,8 @@ class TaskState:
 
 
 def _main_finetuning_mode(args):
-    if args.finetuning_mode in [None, "soft_joint"]:
-        return "standard"
+    if args.finetuning_mode in [None, "scout"]:
+        return "independent_ft"
     return args.finetuning_mode
 
 
@@ -96,7 +96,7 @@ def _zeroshot_path(args, train_dataset):
 def _finetuned_path(args, train_dataset):
     return os.path.join(
         _checkpoint_dir(args, train_dataset),
-        soft_joint_checkpoint_name(
+        scout_checkpoint_name(
             args.coupling_tau,
             args.coupling_lambda,
             run_name=args.run_name,
@@ -110,7 +110,7 @@ def _independent_init_path(args, train_dataset):
         return None
     return os.path.join(
         _checkpoint_dir(args, train_dataset),
-        finetuned_checkpoint_name("standard", run_name),
+        finetuned_checkpoint_name("independent_ft", run_name),
     )
 
 
@@ -126,7 +126,7 @@ def _ensure_zeroshot_checkpoint(args, train_dataset):
 def _distance_history_path(args):
     return os.path.join(
         args.save,
-        soft_joint_distance_name(
+        scout_distance_name(
             args.coupling_tau,
             args.coupling_lambda,
             run_name=args.run_name,
@@ -249,7 +249,7 @@ def _clip_gradients(states, all_params, args):
         for state in states:
             torch.nn.utils.clip_grad_norm_(state.params, args.grad_clip_norm)
         return
-    raise ValueError("soft_joint_finetune.py supports global, indept, or noclip.")
+    raise ValueError("scout_finetune.py supports global, indept, or noclip.")
 
 
 def _trainable_encoder_parameters(model):
@@ -369,7 +369,7 @@ def _global_step_metrics(step_infos, coupling_loss_value, device):
     }
 
 
-def soft_joint_finetune(args, train_datasets=None):
+def scout_finetune(args, train_datasets=None):
     assert args.save is not None, "Please provide a checkpoint directory with --save."
     assert args.num_steps > 0, "--num-steps must be positive."
     assert args.coupling_tau > 0, "--coupling-tau must be positive."
@@ -378,7 +378,7 @@ def soft_joint_finetune(args, train_datasets=None):
     _set_seed(args.seed)
 
     main_mode = _main_finetuning_mode(args)
-    assert main_mode == "standard", (
+    assert main_mode == "independent_ft", (
         "SCouT uses AdamW over the specialist parameters."
     )
 
@@ -465,7 +465,7 @@ def soft_joint_finetune(args, train_datasets=None):
                     f"Epoch: {first_state.epoch}\t"
                     f"Batch: {first_state.batch_idx}/{first_state.num_batches}\t"
                     f"Task Loss: {metrics['task_loss']:.6f}\t"
-                    f"Soft Joint Loss: {metrics['coupling_loss']:.6f}\t"
+                    f"SCouT Coupling Loss: {metrics['coupling_loss']:.6f}\t"
                     # f"Distance: {distance:.6f}\t"
                     f"Data (t) {metrics['avg_data_time']:.3f}\t"
                     f"Batch (t) {metrics['avg_batch_time']:.3f}",
@@ -484,7 +484,7 @@ def soft_joint_finetune(args, train_datasets=None):
 def main():
     args = parse_arguments()
     if args.finetuning_mode is None:
-        args.finetuning_mode = "soft_joint"
+        args.finetuning_mode = "scout"
 
     if args.save is None:
             args.save = f"checkpoints/{args.model}"
@@ -502,7 +502,7 @@ def main():
                 f"for {args.num_steps} steps"
             )
             print("=" * 100)
-        soft_joint_finetune(args, train_datasets)
+        scout_finetune(args, train_datasets)
     finally:
         if distributed_started:
             cleanup_ddp()

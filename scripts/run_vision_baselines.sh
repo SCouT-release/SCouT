@@ -9,7 +9,7 @@ RUN="${RUN:-paper_seed0}"
 SAVE="${SAVE:-checkpoints/${MODEL}}"
 DATA_LOCATION="${DATA_LOCATION:-${HOME}/data}"
 OPENCLIP_CACHEDIR="${OPENCLIP_CACHEDIR:-${HOME}/.cache/open_clip}"
-METHODS="${METHODS:-standard linear attention saft mergopt hard_joint uw pcgrad}"
+METHODS="${METHODS:-independent_ft ftts ft_attention saft mergopt hard_mtl hard_mtl_uw hard_mtl_pcgrad}"
 MERGE_MODES="${MERGE_MODES:-ta}"
 LR="${LR:-1e-5}"
 WD="${WD:-0.1}"
@@ -35,8 +35,8 @@ COMMON_ARGS=(
 
 for method in ${METHODS}; do
   case "${method}" in
-    standard|linear|attention|saft|mergopt)
-      python -m src.indep_finetune \
+    independent_ft|ftts|ft_attention|saft|mergopt)
+      python -m src.independent_finetune \
         "${COMMON_ARGS[@]}" \
         --finetuning-mode "${method}" \
         --train-dataset "${DATASETS}"
@@ -47,7 +47,7 @@ for method in ${METHODS}; do
         --eval-datasets "${DATASETS}"
 
       for merge_mode in ${MERGE_MODES}; do
-        python -m src.eval_task_addition \
+        python -m src.eval_merge \
           "${COMMON_ARGS[@]}" \
           --finetuning-mode "${method}" \
           --eval-datasets "${DATASETS}" \
@@ -56,8 +56,8 @@ for method in ${METHODS}; do
           --n-eval-points 41
       done
       ;;
-    hard_joint|uw|pcgrad)
-      python -m src.hard_joint_finetune \
+    hard_mtl|hard_mtl_uw|hard_mtl_pcgrad)
+      python -m src.hard_mtl_finetune \
         "${COMMON_ARGS[@]}" \
         --finetuning-mode "${method}" \
         --train-dataset "${DATASETS}"

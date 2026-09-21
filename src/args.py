@@ -149,20 +149,19 @@ def parse_arguments():
     parser.add_argument(
         "--finetuning-mode",
         choices=[
-            "standard",
-            "linear",
-            "posthoc",
+            "independent_ft",
+            "ftts",
+            "posthoc_ftts",
             "none",
             "saft",
-            "attention",
+            "ft_attention",
             "mergopt",
             "scout",
-            "soft_joint",
-            "hard_joint",
-            "uw",
-            "pcgrad",
+            "hard_mtl",
+            "hard_mtl_uw",
+            "hard_mtl_pcgrad",
         ],
-        help="Training method. `scout` is the public name for the legacy `soft_joint` mode.",
+        help="Training method, using the method names from the paper.",
     )
     parser.add_argument(
         "--saft-rho",
@@ -215,7 +214,7 @@ def parse_arguments():
         type=str,
         default=None,
         help=(
-            "Optional standard fine-tuning run name used to initialize each "
+            "Optional Independent FT run name used to initialize each "
             "SCouT specialist from its own independent checkpoint."
         ),
     )
@@ -272,7 +271,7 @@ def parse_arguments():
         type=str.lower,
         choices=["ta", "average", "fisher", "ties", "wudi"],
         default="ta",
-        help="Task-vector merge method for eval_task_addition.py.",
+        help="Post-hoc merging rule for eval_merge.py.",
     )
     parser.add_argument(
         "--ties-trim-ratio",
@@ -293,44 +292,42 @@ def parse_arguments():
         help="Learning rate for WUDI-Merging.",
     )
     parser.add_argument(
-        "--adamerge-steps",
+        "--adamerging-steps",
         type=int,
         default=500,
         help="Number of optimizer steps for supervised AdaMerging.",
     )
     parser.add_argument(
-        "--adamerge-lr",
+        "--adamerging-lr",
         type=float,
         default=0.001,
         help="Learning rate for supervised AdaMerging coefficients.",
     )
     parser.add_argument(
-        "--adamerge-prior",
+        "--adamerging-prior",
         type=float,
         default=0.15,
         help="Initial and regularization target value for AdaMerging coefficients.",
     )
     parser.add_argument(
-        "--adamerge-reg",
+        "--adamerging-reg",
         type=float,
         default=0.01,
-        help="L2 regularization strength toward --adamerge-prior.",
+        help="L2 regularization strength toward --adamerging-prior.",
     )
     parser.add_argument(
-        "--adamerge-batch-size",
+        "--adamerging-batch-size",
         type=int,
         default=None,
         help="Validation batch size for AdaMerging coefficient optimization.",
     )
     parser.add_argument(
-        "--adamerge-log-every",
+        "--adamerging-log-every",
         type=int,
         default=25,
         help="How often to print AdaMerging optimization progress.",
     )
     parsed_args = parser.parse_args()
-    if parsed_args.finetuning_mode == "scout":
-        parsed_args.finetuning_mode = "soft_joint"
     parsed_args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if parsed_args.load is not None and len(parsed_args.load) == 1:

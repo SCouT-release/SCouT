@@ -9,48 +9,48 @@ def _run_prefix(run_name):
     return "" if not run_name else f"{run_name}_"
 
 
-def soft_joint_checkpoint_name(coupling_tau, coupling_lambda, step=None, run_name=None):
+def scout_checkpoint_name(coupling_tau, coupling_lambda, step=None, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
     if step is None:
-        return f"sj_finetuned_{run_prefix}{tau}_{lam}.pt"
-    return f"sj_checkpoint_{run_prefix}{tau}_{lam}_{step}.pt"
+        return f"scout_finetuned_{run_prefix}{tau}_{lam}.pt"
+    return f"scout_checkpoint_{run_prefix}{tau}_{lam}_{step}.pt"
 
 
-def soft_joint_accuracy_name(coupling_tau, coupling_lambda, run_name=None):
+def scout_accuracy_name(coupling_tau, coupling_lambda, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
-    return f"sj_ft_accuracies_{run_prefix}{tau}_{lam}.json"
+    return f"scout_accuracies_{run_prefix}{tau}_{lam}.json"
 
 
-def soft_joint_addition_name(coupling_tau, coupling_lambda, run_name=None):
+def scout_merge_name(coupling_tau, coupling_lambda, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
-    return f"sj_additions_{run_prefix}{tau}_{lam}.json"
+    return f"scout_merge_{run_prefix}{tau}_{lam}.json"
 
 
-def soft_joint_adamerge_name(coupling_tau, coupling_lambda, run_name=None):
+def scout_adamerging_name(coupling_tau, coupling_lambda, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
-    return f"sj_adamerge_{run_prefix}{tau}_{lam}.json"
+    return f"scout_adamerging_{run_prefix}{tau}_{lam}.json"
 
 
-def soft_joint_negation_name(coupling_tau, coupling_lambda, run_name=None):
+def scout_negation_name(coupling_tau, coupling_lambda, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
-    return f"sj_negations_{run_prefix}{tau}_{lam}.json"
+    return f"scout_negations_{run_prefix}{tau}_{lam}.json"
 
 
-def soft_joint_distance_name(coupling_tau, coupling_lambda, run_name=None):
+def scout_distance_name(coupling_tau, coupling_lambda, run_name=None):
     tau = format_coupling_value(coupling_tau)
     lam = format_coupling_value(coupling_lambda)
     run_prefix = _run_prefix(run_name)
-    return f"sj_distance_history_{run_prefix}{tau}_{lam}.json"
+    return f"scout_distance_history_{run_prefix}{tau}_{lam}.json"
 
 
 def fully_connected_adjacency(num_tasks, device):
@@ -97,7 +97,7 @@ def _matching_trainable_encoder_parameters(models):
     return named_params, param_names
 
 
-def soft_joint_loss(models, pretrained_state_dict, coupling_lambda, task_weights=None):
+def scout_loss(models, pretrained_state_dict, coupling_lambda, task_weights=None):
     """Differentiable lambda/2 * sum_k ||w_0 + sum_l a_l u_l - w_k||^2 penalty."""
     num_tasks = len(models)
     device = next(models[0].parameters()).device
@@ -120,7 +120,7 @@ def soft_joint_loss(models, pretrained_state_dict, coupling_lambda, task_weights
 
 
 @torch.no_grad()
-def compute_soft_joint_distance(models, task_weights=None):
+def compute_scout_distance(models, task_weights=None):
     """Return the average distance from each task encoder to the merged center.
 
     This is a diagnostic for the SCouT penalty: for each trainable encoder

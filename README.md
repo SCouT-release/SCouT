@@ -19,11 +19,27 @@ independent fine-tuning and hard parameter-sharing multitask learning.
 | --- | --- |
 | Proposed method | SCouT |
 | Specialist baselines | Independent FT, FTTS, FT-Attention, SAFT, MergOPT |
-| Hard-sharing baselines | Hard MTL, uncertainty weighting, PCGrad |
+| Hard-sharing baselines | Hard MTL, Hard MTL + UW, Hard MTL + PCGrad |
 | Post-hoc merging | Weight averaging, Task Arithmetic, Fisher, TIES, WUDI, AdaMerging |
 
-The public CLI uses the name `scout`. Internally, the legacy name `soft_joint`
-is retained so existing checkpoints remain compatible.
+CLI modes, Python modules, checkpoints, and result files use the method names
+reported in the paper.
+
+| Paper name | `--finetuning-mode` | Training entry point |
+| --- | --- | --- |
+| SCouT | `scout` | `src.scout_finetune` |
+| Independent FT | `independent_ft` | `src.independent_finetune` |
+| FTTS | `ftts` | `src.independent_finetune` |
+| FT-Attention | `ft_attention` | `src.independent_finetune` |
+| SAFT | `saft` | `src.independent_finetune` |
+| MergOPT | `mergopt` | `src.independent_finetune` |
+| Hard MTL | `hard_mtl` | `src.hard_mtl_finetune` |
+| Hard MTL + UW | `hard_mtl_uw` | `src.hard_mtl_finetune` |
+| Hard MTL + PCGrad | `hard_mtl_pcgrad` | `src.hard_mtl_finetune` |
+
+Checkpoint and JSON filenames use the same canonical prefixes. Because this is
+an anonymous release, legacy checkpoint names from the development repository
+are intentionally not supported.
 
 ## Installation
 
@@ -105,14 +121,14 @@ bash scripts/run_vision_baselines.sh
 Methods and merge rules can be restricted without editing the script:
 
 ```bash
-METHODS="standard linear attention" MERGE_MODES="average ta ties" \
+METHODS="independent_ft ftts ft_attention" MERGE_MODES="average ta ties" \
   bash scripts/run_vision_baselines.sh
 ```
 
 AdaMerging is evaluated separately after SCouT checkpoints are available:
 
 ```bash
-python -m src.eval_adamerge \
+python -m src.eval_adamerging \
   --finetuning-mode scout \
   --eval-datasets CIFAR100,Flowers102,PCAM,FER2013,Cars,DTD,GTSRB,RESISC45,SUN397,SVHN \
   --model ViT-B-32 \
@@ -125,20 +141,20 @@ python -m src.eval_adamerge \
 
 ```bash
 # Independent specialist methods
-python -m src.indep_finetune --finetuning-mode standard --train-dataset CIFAR100
-python -m src.indep_finetune --finetuning-mode linear --train-dataset CIFAR100
-python -m src.indep_finetune --finetuning-mode attention --train-dataset CIFAR100
-python -m src.indep_finetune --finetuning-mode saft --train-dataset CIFAR100
-python -m src.indep_finetune --finetuning-mode mergopt --train-dataset CIFAR100
+python -m src.independent_finetune --finetuning-mode independent_ft --train-dataset CIFAR100
+python -m src.independent_finetune --finetuning-mode ftts --train-dataset CIFAR100
+python -m src.independent_finetune --finetuning-mode ft_attention --train-dataset CIFAR100
+python -m src.independent_finetune --finetuning-mode saft --train-dataset CIFAR100
+python -m src.independent_finetune --finetuning-mode mergopt --train-dataset CIFAR100
 
 # Shared-encoder methods
-python -m src.hard_joint_finetune --finetuning-mode hard_joint --train-dataset CIFAR100,Flowers102
-python -m src.hard_joint_finetune --finetuning-mode uw --train-dataset CIFAR100,Flowers102
-python -m src.hard_joint_finetune --finetuning-mode pcgrad --train-dataset CIFAR100,Flowers102
+python -m src.hard_mtl_finetune --finetuning-mode hard_mtl --train-dataset CIFAR100,Flowers102
+python -m src.hard_mtl_finetune --finetuning-mode hard_mtl_uw --train-dataset CIFAR100,Flowers102
+python -m src.hard_mtl_finetune --finetuning-mode hard_mtl_pcgrad --train-dataset CIFAR100,Flowers102
 
 # Specialist and merged-model evaluation
 python -m src.eval_single_task --finetuning-mode scout --eval-datasets CIFAR100,Flowers102
-python -m src.eval_task_addition --finetuning-mode scout --merge-mode ta --eval-datasets CIFAR100,Flowers102
+python -m src.eval_merge --finetuning-mode scout --merge-mode ta --eval-datasets CIFAR100,Flowers102
 ```
 
 ## Paper diagnostics

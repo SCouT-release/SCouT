@@ -20,7 +20,7 @@ def _join_module_parameter_name(module_name, parameter_name):
     return parameter_name if module_name == "" else f"{module_name}.{parameter_name}"
 
 
-def attention_parameter_names(model, include_bias=False):
+def ft_attention_parameter_names(model, include_bias=False):
     """Return attention projection parameter names for Transformer fine-tuning."""
     parameter_names = set()
     target_names = ATTENTION_WEIGHT_NAMES
@@ -40,9 +40,9 @@ def attention_parameter_names(model, include_bias=False):
     return parameter_names
 
 
-def configure_attention_finetuning(model, include_bias=False, verbose=True):
+def configure_ft_attention(model, include_bias=False, verbose=True):
     """Freeze all parameters except attention projection weights."""
-    trainable_names = attention_parameter_names(model, include_bias=include_bias)
+    trainable_names = ft_attention_parameter_names(model, include_bias=include_bias)
     if not trainable_names:
         raise ValueError(
             "No torch.nn.MultiheadAttention parameters found for attention fine-tuning."

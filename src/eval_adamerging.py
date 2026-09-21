@@ -11,10 +11,10 @@ from src.datasets.common import get_dataloader, maybe_dictionarize
 from src.datasets.registry import get_dataset
 from src.eval import evaluate_task_vector_at_coef
 from src.heads import get_classification_head
-from src.soft_joint import (
-    soft_joint_accuracy_name,
-    soft_joint_adamerge_name,
-    soft_joint_checkpoint_name,
+from src.scout import (
+    scout_accuracy_name,
+    scout_adamerging_name,
+    scout_checkpoint_name,
 )
 from src.task_vectors import NonLinearTaskVector
 
@@ -90,14 +90,14 @@ def _weighted_task_vector(task_vectors, coefficients):
     return merged_task_vector
 
 
-def _load_soft_joint_task_vectors(args, eval_datasets, run_name):
+def _load_scout_task_vectors(args, eval_datasets, run_name):
     task_vectors = []
     pretrained_checkpoint = None
     for dataset in eval_datasets:
         pretrained_checkpoint = f"{args.save}/{dataset}Val/zeroshot.pt"
         finetuned_checkpoint = (
             f"{args.save}/{dataset}Val/"
-            f"{soft_joint_checkpoint_name(args.coupling_tau, args.coupling_lambda, run_name=run_name)}"
+            f"{scout_checkpoint_name(args.coupling_tau, args.coupling_lambda, run_name=run_name)}"
         )
         if not os.path.exists(finetuned_checkpoint):
             raise FileNotFoundError(f"Missing checkpoint: {finetuned_checkpoint}")
@@ -108,7 +108,7 @@ def _load_soft_joint_task_vectors(args, eval_datasets, run_name):
 
 
 def _make_validation_loaders(args, image_encoder, eval_datasets):
-    batch_size = args.adamerge_batch_size or args.batch_size
+    batch_size = args.adamerging_batch_size or args.batch_size
     loaders = {}
     for dataset_name in eval_datasets:
         val_dataset_name = dataset_name + "Val"
@@ -136,9 +136,9 @@ def _make_classification_heads(args, eval_datasets):
     return heads, num_classes
 
 
-def _supervised_adamerge(args, pretrained_checkpoint, task_vectors, eval_datasets):
-    if not 0.0 < args.adamerge_prior < 1.0:
-        raise ValueError("--adamerge-prior must be strictly between 0 and 1.")
+def _supervised_adamerging(args, pretrained_checkpoint, task_vectors, eval_datasets):
+    if not 0.0 < args.adamerging_prior < 1.0:
+        raise ValueError("--adamerging-prior must be strictly between 0 and 1.")
 
     image_encoder = utils.torch_load(pretrained_checkpoint)
     image_encoder.eval()
@@ -153,13 +153,13 @@ def _supervised_adamerge(args, pretrained_checkpoint, task_vectors, eval_dataset
     raw_coefficients = torch.nn.Parameter(
         torch.full(
             (len(eval_datasets),),
-            _logit(args.adamerge_prior),
+            _logit(args.adamerging_prior),
             dtype=torch.float32,
         )
     )
-    optimizer = torch.optim.Adam([raw_coefficients], lr=args.adamerge_lr)
+    optimizer = torch.optim.Adam([raw_coefficients], lr=args.adamerging_lr)
 
-    for step in range(args.adamerge_steps):
+    for step in range(args.adamerging_steps):
         coefficients = torch.sigmoid(raw_coefficients)
         merged_state = _merged_state_dict(
             base_state, task_vector_states, coefficients, args.device
@@ -179,21 +179,21 @@ def _supervised_adamerge(args, pretrained_checkpoint, task_vectors, eval_dataset
 
         balanced_loss = torch.stack(task_losses).mean()
         regularizer = (
-            (coefficients.to(args.device) - args.adamerge_prior).pow(2).mean()
+            (coefficients.to(args.device) - args.adamerging_prior).pow(2).mean()
         )
-        loss = balanced_loss + args.adamerge_reg * regularizer
+        loss = balanced_loss + args.adamerging_reg * regularizer
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         loss_value = float(loss.detach().cpu().item())
-        if args.adamerge_log_every > 0 and (
-            step == 0 or (step + 1) % args.adamerge_log_every == 0
+        if args.adamerging_log_every > 0 and (
+            step == 0 or (step + 1) % args.adamerging_log_every == 0
         ):
             coef_text = ", ".join(f"{c:.4f}" for c in coefficients.detach().tolist())
             print(
-                f"AdaMerge step {step + 1}/{args.adamerge_steps}: "
+                f"AdaMerging step {step + 1}/{args.adamerging_steps}: "
                 f"loss={loss_value:.4f}, balanced_ce={float(balanced_loss.detach().cpu().item()):.4f}, "
                 f"reg={float(regularizer.detach().cpu().item()):.4f}, coeffs=[{coef_text}]"
             )
@@ -204,8 +204,8 @@ def _supervised_adamerge(args, pretrained_checkpoint, task_vectors, eval_dataset
 
 def main():
     args = parse_arguments()
-    if args.finetuning_mode != "soft_joint":
-        raise ValueError("eval_adamerge.py currently expects --finetuning-mode=soft_joint.")
+    if args.finetuning_mode != "scout":
+        raise ValueError("eval_adamerging.py currently expects --finetuning-mode=scout.")
 
     if args.save is None:
         if args.seed is not None:
@@ -222,7 +222,7 @@ def main():
 
     ft_accuracies_path = os.path.join(
         args.save,
-        soft_joint_accuracy_name(
+        scout_accuracy_name(
             args.coupling_tau,
             args.coupling_lambda,
             run_name=run_name,
@@ -231,18 +231,17 @@ def main():
     with open(ft_accuracies_path) as f:
         args.finetuning_accuracies = json.load(f)
 
-    pretrained_checkpoint, task_vectors = _load_soft_joint_task_vectors(
+    pretrained_checkpoint, task_vectors = _load_scout_task_vectors(
         args, eval_datasets, run_name
     )
-    # supervised_adamerge to learn coefficients
-    coefficients = _supervised_adamerge(
+    coefficients = _supervised_adamerging(
         args, pretrained_checkpoint, task_vectors, eval_datasets
     )
     coefficient_by_task = {
         dataset_name: float(coefficient)
         for dataset_name, coefficient in zip(eval_datasets, coefficients)
     }
-    print("Learned AdaMerge coefficients:")
+    print("Learned AdaMerging coefficients:")
     print(json.dumps(coefficient_by_task, indent=4))
 
     task_vector = _weighted_task_vector(task_vectors, coefficients)
@@ -267,8 +266,8 @@ def main():
         args.finetuning_accuracies[dataset] for dataset in eval_datasets
     ) / len(eval_datasets)
 
-    val_metrics["adamerge_coefficients"] = coefficient_by_task
-    test_metrics["adamerge_coefficients"] = coefficient_by_task
+    val_metrics["adamerging_coefficients"] = coefficient_by_task
+    test_metrics["adamerging_coefficients"] = coefficient_by_task
 
     print("=" * 100)
     print(f"Test normalized accuracy: {test_metrics['avg_normalized_top1']}")
@@ -278,17 +277,17 @@ def main():
         "test": test_metrics,
         "val": val_metrics,
         "coefficients": coefficient_by_task,
-        "adamerge": {
-            "steps": args.adamerge_steps,
-            "lr": args.adamerge_lr,
-            "prior": args.adamerge_prior,
-            "reg": args.adamerge_reg,
+        "adamerging": {
+            "steps": args.adamerging_steps,
+            "lr": args.adamerging_lr,
+            "prior": args.adamerging_prior,
+            "reg": args.adamerging_reg,
         },
     }
 
     save_file = os.path.join(
         args.save,
-        soft_joint_adamerge_name(
+        scout_adamerging_name(
             args.coupling_tau,
             args.coupling_lambda,
             run_name=run_name,
@@ -296,7 +295,7 @@ def main():
     )
     with open(save_file, "w") as f:
         json.dump(results, f, indent=4)
-    print(f"Saved AdaMerge results to {save_file}")
+    print(f"Saved AdaMerging results to {save_file}")
 
 
 if __name__ == "__main__":

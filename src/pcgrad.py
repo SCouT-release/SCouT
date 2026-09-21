@@ -8,11 +8,13 @@ def _run_suffix(run_name):
 
 
 def pcgrad_checkpoint_path(save_dir, run_name=None):
-    return os.path.join(save_dir, f"pcgrad_finetuned{_run_suffix(run_name)}.pt")
+    return os.path.join(
+        save_dir, f"hard_mtl_pcgrad_finetuned{_run_suffix(run_name)}.pt"
+    )
 
 
 def pcgrad_accuracy_name(run_name=None):
-    return f"pcgrad_ft_accuracies{_run_suffix(run_name)}.json"
+    return f"hard_mtl_pcgrad_accuracies{_run_suffix(run_name)}.json"
 
 
 class PCGrad:

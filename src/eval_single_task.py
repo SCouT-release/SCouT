@@ -3,22 +3,23 @@ import json
 from src import utils
 from src.args import parse_arguments
 from src.eval import eval_single_dataset
-from src.hard_joint import hard_joint_accuracy_name, hard_joint_checkpoint_path
+from src.hard_mtl import hard_mtl_accuracy_name, hard_mtl_checkpoint_path
 from src.linearize import LinearizedImageEncoder
-from src.PCGrad import pcgrad_accuracy_name, pcgrad_checkpoint_path
+from src.pcgrad import pcgrad_accuracy_name, pcgrad_checkpoint_path
 from src.result_names import finetuned_checkpoint_name, single_task_accuracy_name
-from src.soft_joint import soft_joint_accuracy_name, soft_joint_checkpoint_name
+from src.scout import scout_accuracy_name, scout_checkpoint_name
 from src.task_vectors import LinearizedTaskVector, NonLinearTaskVector
 from src.uncertainty_weighting import uw_accuracy_name, uw_checkpoint_path
 
 # This script evaluates single-task performance before merging.
-# Example: python -m src.eval_single_task --finetuning-mode=attention --model=ViT-B-32
+# Example: python -m src.eval_single_task --finetuning-mode=ft_attention --model=ViT-B-32
 args = parse_arguments()
 if args.finetuning_mode is None:
     raise ValueError(
         "Please specify --finetuning-mode. "
-        "Use scout for SCouT checkpoints, hard_joint/uw/pcgrad for hard-sharing, "
-        "or one of standard/linear/posthoc/none/saft/attention/mergopt."
+        "Use scout for SCouT checkpoints, hard_mtl/hard_mtl_uw/hard_mtl_pcgrad "
+        "for hard-sharing, or independent_ft/ftts/posthoc_ftts/none/saft/"
+        "ft_attention/mergopt."
     )
 
 if args.save is None:
@@ -33,26 +34,26 @@ accuracies = {}
 print("*" * 100)
 if args.finetuning_mode == "none":
     print("Evaluating pretrained models.")
-elif args.finetuning_mode == "standard":
-    print("Evaluating non-linear FT models.")
-elif args.finetuning_mode == "linear":
-    print("Evaluating linear FT models.")
-elif args.finetuning_mode == "posthoc":
-    print("Evaluating post-hoc linearized models.")
+elif args.finetuning_mode == "independent_ft":
+    print("Evaluating Independent FT models.")
+elif args.finetuning_mode == "ftts":
+    print("Evaluating FTTS models.")
+elif args.finetuning_mode == "posthoc_ftts":
+    print("Evaluating post-hoc FTTS models.")
 elif args.finetuning_mode == "saft":
     print("Evaluating SAFT models.")
-elif args.finetuning_mode == "attention":
-    print("Evaluating attention-only FT models.")
+elif args.finetuning_mode == "ft_attention":
+    print("Evaluating FT-Attention models.")
 elif args.finetuning_mode == "mergopt":
     print("Evaluating MergOPT FT models.")
-elif args.finetuning_mode == "soft_joint":
+elif args.finetuning_mode == "scout":
     print("Evaluating SCouT models.")
-elif args.finetuning_mode == "hard_joint":
-    print("Evaluating hard-joint FT model.")
-elif args.finetuning_mode == "uw":
-    print("Evaluating uncertainty-weighted hard-joint FT model.")
-elif args.finetuning_mode == "pcgrad":
-    print("Evaluating PCGrad hard-joint FT model.")
+elif args.finetuning_mode == "hard_mtl":
+    print("Evaluating Hard MTL model.")
+elif args.finetuning_mode == "hard_mtl_uw":
+    print("Evaluating Hard MTL + UW model.")
+elif args.finetuning_mode == "hard_mtl_pcgrad":
+    print("Evaluating Hard MTL + PCGrad model.")
 
 default_eval_datasets = [
         "CIFAR100",
@@ -72,14 +73,14 @@ eval_datasets = args.eval_datasets or default_eval_datasets
 eval_run_name = args.run_name or None
 
 shared_image_encoder = None
-if args.finetuning_mode in {"hard_joint", "uw", "pcgrad"}:
+if args.finetuning_mode in {"hard_mtl", "hard_mtl_uw", "hard_mtl_pcgrad"}:
     checkpoint_path = (
         uw_checkpoint_path(args.save, eval_run_name)
-        if args.finetuning_mode == "uw"
+        if args.finetuning_mode == "hard_mtl_uw"
         else (
             pcgrad_checkpoint_path(args.save, eval_run_name)
-            if args.finetuning_mode == "pcgrad"
-            else hard_joint_checkpoint_path(args.save, eval_run_name)
+            if args.finetuning_mode == "hard_mtl_pcgrad"
+            else hard_mtl_checkpoint_path(args.save, eval_run_name)
         )
     )
     shared_image_encoder = utils.torch_load(
@@ -91,17 +92,17 @@ for dataset in eval_datasets:
     print("*" * 100)
     print(f"Evaluating on {dataset}")
 
-    if args.finetuning_mode in {"hard_joint", "uw", "pcgrad"}:
+    if args.finetuning_mode in {"hard_mtl", "hard_mtl_uw", "hard_mtl_pcgrad"}:
         image_encoder = shared_image_encoder
     else:
         pretrained_checkpoint = (
-            f"{args.save}/{dataset}Val/linear_zeroshot.pt"
-            if args.finetuning_mode == "linear"
+            f"{args.save}/{dataset}Val/ftts_zeroshot.pt"
+            if args.finetuning_mode == "ftts"
             else f"{args.save}/{dataset}Val/zeroshot.pt"
         )
 
-        if args.finetuning_mode == "soft_joint":
-            checkpoint_name = soft_joint_checkpoint_name(
+        if args.finetuning_mode == "scout":
+            checkpoint_name = scout_checkpoint_name(
                 args.coupling_tau,
                 args.coupling_lambda,
                 run_name=eval_run_name,
@@ -110,13 +111,13 @@ for dataset in eval_datasets:
             checkpoint_mode = (
                 args.finetuning_mode
                 if args.finetuning_mode
-                in {"standard", "linear", "saft", "attention", "mergopt"}
-                else "standard"
+                in {"independent_ft", "ftts", "saft", "ft_attention", "mergopt"}
+                else "independent_ft"
             )
             checkpoint_run_name = (
                 eval_run_name
                 if args.finetuning_mode
-                in {"standard", "linear", "saft", "attention", "mergopt", "posthoc"}
+                in {"independent_ft", "ftts", "saft", "ft_attention", "mergopt", "posthoc_ftts"}
                 else None
             )
             checkpoint_name = finetuned_checkpoint_name(
@@ -128,7 +129,7 @@ for dataset in eval_datasets:
         try:
             task_vector = (
                 LinearizedTaskVector(pretrained_checkpoint, finetuned_checkpoint)
-                if args.finetuning_mode == "linear"
+                if args.finetuning_mode == "ftts"
                 else NonLinearTaskVector(pretrained_checkpoint, finetuned_checkpoint)
             )
         except FileNotFoundError:
@@ -138,15 +139,15 @@ for dataset in eval_datasets:
         if args.finetuning_mode == "none":
             image_encoder = task_vector.apply_to(pretrained_checkpoint, scaling_coef=0.0)
         elif args.finetuning_mode in [
-            "standard",
-            "linear",
+            "independent_ft",
+            "ftts",
             "saft",
-            "attention",
+            "ft_attention",
             "mergopt",
-            "soft_joint",
+            "scout",
         ]:
             image_encoder = task_vector.apply_to(pretrained_checkpoint, scaling_coef=1.0)
-        elif args.finetuning_mode == "posthoc":
+        elif args.finetuning_mode == "posthoc_ftts":
             zs_encoder = task_vector.apply_to(pretrained_checkpoint, scaling_coef=0.0)
             ft_encoder = task_vector.apply_to(pretrained_checkpoint, scaling_coef=1.0)
             image_encoder = LinearizedImageEncoder(
@@ -185,30 +186,30 @@ if test_losses:
 # Save results
 if args.finetuning_mode == "none":
     save_path = f"{args.save}/zeroshot_accuracies.json"
-elif args.finetuning_mode == "standard":
-    save_path = f"{args.save}/{single_task_accuracy_name('standard', eval_run_name)}"
-elif args.finetuning_mode == "linear":
-    save_path = f"{args.save}/{single_task_accuracy_name('linear', eval_run_name)}"
-elif args.finetuning_mode == "posthoc":
-    save_path = f"{args.save}/{single_task_accuracy_name('posthoc', eval_run_name)}"
+elif args.finetuning_mode == "independent_ft":
+    save_path = f"{args.save}/{single_task_accuracy_name('independent_ft', eval_run_name)}"
+elif args.finetuning_mode == "ftts":
+    save_path = f"{args.save}/{single_task_accuracy_name('ftts', eval_run_name)}"
+elif args.finetuning_mode == "posthoc_ftts":
+    save_path = f"{args.save}/{single_task_accuracy_name('posthoc_ftts', eval_run_name)}"
 elif args.finetuning_mode == "saft":
     save_path = f"{args.save}/{single_task_accuracy_name('saft', eval_run_name)}"
-elif args.finetuning_mode == "attention":
-    save_path = f"{args.save}/{single_task_accuracy_name('attention', eval_run_name)}"
+elif args.finetuning_mode == "ft_attention":
+    save_path = f"{args.save}/{single_task_accuracy_name('ft_attention', eval_run_name)}"
 elif args.finetuning_mode == "mergopt":
     save_path = f"{args.save}/{single_task_accuracy_name('mergopt', eval_run_name)}"
-elif args.finetuning_mode == "soft_joint":
-    accuracy_name = soft_joint_accuracy_name(
+elif args.finetuning_mode == "scout":
+    accuracy_name = scout_accuracy_name(
         args.coupling_tau,
         args.coupling_lambda,
         run_name=eval_run_name,
     )
     save_path = f"{args.save}/{accuracy_name}"
-elif args.finetuning_mode == "hard_joint":
-    save_path = f"{args.save}/{hard_joint_accuracy_name(eval_run_name)}"
-elif args.finetuning_mode == "uw":
+elif args.finetuning_mode == "hard_mtl":
+    save_path = f"{args.save}/{hard_mtl_accuracy_name(eval_run_name)}"
+elif args.finetuning_mode == "hard_mtl_uw":
     save_path = f"{args.save}/{uw_accuracy_name(eval_run_name)}"
-elif args.finetuning_mode == "pcgrad":
+elif args.finetuning_mode == "hard_mtl_pcgrad":
     save_path = f"{args.save}/{pcgrad_accuracy_name(eval_run_name)}"
 
 with open(save_path, "w") as f:
