@@ -145,21 +145,6 @@ python -m src.eval_single_task --finetuning-mode scout --eval-datasets CIFAR100,
 python -m src.eval_merge --finetuning-mode scout --merge-mode ta --eval-datasets CIFAR100,Flowers102
 ```
 
-## Paper diagnostics
-
-The two retained diagnostic scripts correspond to reported vision experiments:
-
-```bash
-# Loss landscape in Figure 4 and the appendix
-python scripts/landscape_sweep.py --help
-
-# Runtime and peak-memory results in Tables 8-9
-torchrun --standalone --nproc-per-node=2 scripts/benchmark_training_cost.py --help
-```
-
-The resident-specialist variant is available as
-`scripts/benchmark_training_cost_resident.py`.
-
 ## Outputs
 
 Checkpoints and JSON metrics are written under `--save` and are ignored by Git.
