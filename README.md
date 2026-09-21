@@ -125,18 +125,6 @@ METHODS="independent_ft ftts ft_attention" MERGE_MODES="average ta ties" \
   bash scripts/run_vision_baselines.sh
 ```
 
-AdaMerging is evaluated separately after SCouT checkpoints are available:
-
-```bash
-python -m src.eval_adamerging \
-  --finetuning-mode scout \
-  --eval-datasets CIFAR100,Flowers102,PCAM,FER2013,Cars,DTD,GTSRB,RESISC45,SUN397,SVHN \
-  --model ViT-B-32 \
-  --coupling-lambda 0.5 \
-  --run-name paper_seed0 \
-  --save checkpoints/ViT-B-32
-```
-
 ## Individual entry points
 
 ```bash
