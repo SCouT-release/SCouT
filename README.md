@@ -10,8 +10,7 @@ independent fine-tuning and hard parameter-sharing multitask learning.
 
 > **Scope.** This public release covers the CLIP image-classification
 > experiments, vision baselines, post-hoc merging methods, and training-cost
-> benchmark. The RoBERTa/GLUE experiments described in the paper are not part
-> of this code release.
+> benchmark. 
 
 ## Included methods
 
